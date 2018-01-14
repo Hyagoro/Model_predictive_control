@@ -26,7 +26,7 @@ const double Lf = 2.67;
 
 // Both the reference cross track and orientation errors are 0.
 // The reference velocity is set to 40 mph.
-double ref_v = 77.5;//40;
+double ref_v = 75;//40;
 
 size_t x_start = 0;
 size_t y_start = x_start + N;
@@ -71,21 +71,22 @@ public:
 
         // The part of the cost based on the reference state.
         for (int t = 0; t < N; t++) {
-            fg[0] += 8.4 * CppAD::pow(vars[cte_start + t] - 0, 2);
-            fg[0] += 0.32 * CppAD::pow(vars[epsi_start + t] - 0, 2);
-            fg[0] += 0.261 * CppAD::pow(vars[v_start + t] - ref_v, 2);
+            fg[0] += CppAD::pow(vars[cte_start + t], 2);
+            // To avoid right left consecutive steering during big turn
+            fg[0] += 0.3 * CppAD::pow(vars[epsi_start + t], 2);
+            fg[0] += 0.3 * CppAD::pow(vars[v_start + t] - ref_v, 2);
         }
 
         // Minimize the use of actuators.
         for (int t = 0; t < N - 1; t++) {
-            fg[0] += 600 * CppAD::pow(vars[delta_start + t], 2);
-            fg[0] += 17.1 * CppAD::pow(vars[a_start + t], 2);
+            fg[0] += 50 * CppAD::pow(vars[delta_start + t], 2);
+            fg[0] += CppAD::pow(vars[a_start + t], 2);
         }
 
         // Minimize the value gap between sequential actuations.
         for (int t = 0; t < N - 2; t++) {
-            fg[0] += 0.01 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-            fg[0] += 0.0001 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+            fg[0] += CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+            fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
         }
         //
         // Setup Constraints
@@ -164,7 +165,7 @@ MPC::~MPC() {}
 
 vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     bool ok = true;
-    size_t i;
+
     typedef CPPAD_TESTVECTOR(double) Dvector;
 
     double x = state[0];
@@ -187,12 +188,12 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
         vars[i] = 0.0;
     }
     // Set the initial variable values
-//    vars[x_start] = x;
-//    vars[y_start] = y;
-//    vars[psi_start] = psi;
-//    vars[v_start] = v;
-//    vars[cte_start] = cte;
-//    vars[epsi_start] = epsi;
+    vars[x_start] = x;
+    vars[y_start] = y;
+    vars[psi_start] = psi;
+    vars[v_start] = v;
+    vars[cte_start] = cte;
+    vars[epsi_start] = epsi;
 
     // Lower and upper limits for x
     Dvector vars_lowerbound(n_vars);
@@ -208,14 +209,14 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     // The upper and lower limits of delta are set to -25 and 25
     // degrees (values in radians).
     // NOTE: Feel free to change this to something else.
-    for (int i = delta_start; i < a_start; i++) {
+    for (size_t i = delta_start; i < a_start; i++) {
         vars_lowerbound[i] = -0.436332;
         vars_upperbound[i] = 0.436332;
     }
 
     // Acceleration/decceleration upper and lower limits.
     // NOTE: Feel free to change this to something else.
-    for (int i = a_start; i < n_vars; i++) {
+    for (size_t i = a_start; i < n_vars; i++) {
         vars_lowerbound[i] = -1.0;
         vars_upperbound[i] = 1.0;
     }

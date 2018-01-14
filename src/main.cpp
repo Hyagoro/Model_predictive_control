@@ -68,25 +68,30 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
 }
 
 Eigen::VectorXd globalKinematic(Eigen::VectorXd state,
-                                Eigen::VectorXd actuators, double dt, double lf) {
-    Eigen::VectorXd next_state(state.size());
+                                Eigen::VectorXd actuators, double dt, double lf, double st_angle) {
+    Eigen::VectorXd next_state(state.size() + actuators.size());
     auto x = state(0);
     auto y = state(1);
     auto psi = state(2);
     auto v = state(3);
 
-    auto delta = actuators(0);
-    auto a = actuators(1);
+    auto cte = actuators(0);
+    auto epsi = actuators(1);
 
     // Recall the equations for the model:
     // x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
     // y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
     // psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
     // v_[t+1] = v[t] + a[t] * dt
-    next_state(0) = x + v * cos(psi) * dt;
-    next_state(1) = y + v * sin(psi) * dt;
-    next_state(2) = psi + v / lf * delta * dt;
-    next_state(3) = v + a * dt;
+
+    // x = 0, cos(0) = 1
+    next_state(0) = v * dt;// x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
+    // y = 0, sin(0) = 0
+    next_state(1) = 0;// y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
+    next_state(2) = - v / lf * st_angle * dt;// psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
+    next_state(3) = v + epsi * dt;// v_[t+1] = v[t] + a[t] * dt
+    next_state(4) = cte + v * sin(epsi) * dt;
+    next_state(5) = epsi + next_state(2);
     return next_state;
 }
 
@@ -117,12 +122,12 @@ int main() {
                     double psi = j[1]["psi"];
                     double v = j[1]["speed"];
 
-                    double delta = j[1]["steering_angle"];
+                    double st_angle = j[1]["steering_angle"];
                     double a = j[1]["throttle"];
 
 
                     /*
-                    * TODO: Calculate steering angle and throttle using MPC.
+                    * DONE: Calculate steering angle and throttle using MPC.
                     *
                     * Both are in between [-1, 1].
                     *
@@ -144,62 +149,17 @@ int main() {
                         y_veh[i] = dy * cos_psi + dx * sin_psi;
                     }
 
-
-
-
-//                    double cte = polyeval(coeffs, 0);
-                    // x = 0, so
-//                    const double epsi = -atan(coeffs[1]); //-f'(0)
-
-                    // Kinematic model is used to predict vehicle state at the actual
-                    // moment of control (current time + delay dt)
-                    // Recall the equations for the model:
-                    // x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
-                    // y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
-                    // psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
-                    // v_[t+1] = v[t] + a[t] * dt
-                    //cos(psi[t]) = 1 | x=0 | y=0
-//                    double pred_px = 0.0 + v * dt;
-//                    const double pred_py = 0.0;
-//                    double pred_psi = v * -delta / Lf * dt;
-//                    double pred_v = v + a * dt;
-//                    double pred_cte = cte + (v * sin(epsi) * dt);
-//                    double pred_epsi = epsi + (v * -delta / Lf * dt);
-
                     auto coeffs = polyfit(x_veh, y_veh, 3); // Fit waypoints
-
-
-                    // Initial state.
-                    const double x0 = 0;
-                    const double y0 = 0;
-                    const double psi0 = 0;
-                    const double cte0 = coeffs[0];
-                    const double epsi0 = -atan(coeffs[1]);
-
-                    // State after delay.
-//                    double pred_px = x0 + (v * cos(psi0) * dt);
-//                    double pred_py = y0 + (v * sin(psi0) * dt);
-//                    double pred_psi = psi0 - (v * delta * dt / lf);
-//                    double pred_v = v + a * dt;
-//                    double pred_cte = cte0 + (v * sin(epsi0) * dt);
-//                    double pred_epsi = epsi0 - (v * atan(coeffs[1]) * dt / lf);
-                    const double pred_px = v * dt;
-                    const double pred_py = 0;
-                    const double pred_psi = - v * delta * dt / lf;
-                    const double pred_v = v + a * dt;
-                    const double pred_cte = cte0 + v * sin(epsi0) * dt;
-                    const double pred_epsi = epsi0 + pred_psi;
 
                     Eigen::VectorXd state0(4);
                     state0 << 0, 0, 0, v;
                     Eigen::VectorXd actuators(2);
-                    actuators << coeffs[0], -atan(coeffs[1]);
-                    auto kin = globalKinematic(state0, actuators, dt, lf);
+                    actuators << polyeval(coeffs, 0), -atan(coeffs[1]);
+                    auto kinematic = globalKinematic(state0, actuators, dt, lf, st_angle);
 
                     // Feed in the predicted state values
                     Eigen::VectorXd state(6);
-//                    state << kin[0], kin[1], kin[2], kin[3], pred_cte, pred_epsi;
-                    state << pred_px, pred_py, pred_psi, pred_v, pred_cte, pred_epsi;
+                    state << kinematic[0], kinematic[1], kinematic[2], kinematic[3], kinematic[4], kinematic[5];
                     auto mpc_sol = mpc.Solve(state, coeffs);
 
                     double steer_value = mpc_sol[0] / deg2rad(25); // convert to [-1..1] range
