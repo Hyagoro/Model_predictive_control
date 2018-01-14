@@ -128,16 +128,16 @@ int main() {
                     *
                     */
 
-                    const long N = mpc.N;
+                    const long n_waypts = ptsx.size();
                     const double dt = mpc.dt;
                     const double lf = mpc.Lf;
 
                     // Convert to the vehicle coordinate system
                     const double cos_psi = cos(-psi);
                     const double sin_psi = sin(-psi);
-                    Eigen::VectorXd x_veh(N);
-                    Eigen::VectorXd y_veh(N);
-                    for (int i = 0; i < N; i++) {
+                    Eigen::VectorXd x_veh(n_waypts);
+                    Eigen::VectorXd y_veh(n_waypts);
+                    for (int i = 0; i < n_waypts; i++) {
                         const double dx = ptsx[i] - px;
                         const double dy = ptsy[i] - py;
                         x_veh[i] = dx * cos_psi - dy * sin_psi;
@@ -145,13 +145,11 @@ int main() {
                     }
 
 
-                    auto coeffs = polyfit(x_veh, y_veh, 3); // Fit waypoints
 
 
-                    double cte = polyeval(coeffs, 0);
-
+//                    double cte = polyeval(coeffs, 0);
                     // x = 0, so
-                    const double epsi = -atan(coeffs[1]); //-f'(0)
+//                    const double epsi = -atan(coeffs[1]); //-f'(0)
 
                     // Kinematic model is used to predict vehicle state at the actual
                     // moment of control (current time + delay dt)
@@ -168,6 +166,7 @@ int main() {
 //                    double pred_cte = cte + (v * sin(epsi) * dt);
 //                    double pred_epsi = epsi + (v * -delta / Lf * dt);
 
+                    auto coeffs = polyfit(x_veh, y_veh, 3); // Fit waypoints
 
 
                     // Initial state.
@@ -178,12 +177,18 @@ int main() {
                     const double epsi0 = -atan(coeffs[1]);
 
                     // State after delay.
-                    double pred_px = x0 + (v * cos(psi0) * dt);
-                    double pred_py = y0 + (v * sin(psi0) * dt);
-                    double pred_psi = psi0 - (v * delta * dt / lf);
-                    double pred_v = v + a * dt;
-                    double pred_cte = cte0 + (v * sin(epsi0) * dt);
-                    double pred_epsi = epsi0 - (v * atan(coeffs[1]) * dt / lf);
+//                    double pred_px = x0 + (v * cos(psi0) * dt);
+//                    double pred_py = y0 + (v * sin(psi0) * dt);
+//                    double pred_psi = psi0 - (v * delta * dt / lf);
+//                    double pred_v = v + a * dt;
+//                    double pred_cte = cte0 + (v * sin(epsi0) * dt);
+//                    double pred_epsi = epsi0 - (v * atan(coeffs[1]) * dt / lf);
+                    const double pred_px = v * dt;
+                    const double pred_py = 0;
+                    const double pred_psi = - v * delta * dt / lf;
+                    const double pred_v = v + a * dt;
+                    const double pred_cte = cte0 + v * sin(epsi0) * dt;
+                    const double pred_epsi = epsi0 + pred_psi;
 
                     Eigen::VectorXd state0(4);
                     state0 << 0, 0, 0, v;
@@ -194,7 +199,7 @@ int main() {
                     // Feed in the predicted state values
                     Eigen::VectorXd state(6);
                     state << kin[0], kin[1], kin[2], kin[3], pred_cte, pred_epsi;
-
+//                    state << pred_px, pred_py, pred_psi, pred_v, pred_cte, pred_epsi;
                     auto mpc_sol = mpc.Solve(state, coeffs);
 
                     double steer_value = mpc_sol[0] / deg2rad(25); // convert to [-1..1] range
