@@ -29,7 +29,9 @@ Actuators:
 - `a`: Acceleration.
 - `delta`: Steering angle.
 
-This is the cost function we need to minimize in order to find `a` and `delta`.
+This is the cost function we need to minimize in order to find `a` and `delta`:
+
+![alt text][image2]
 
 The following parameters have been manualy tuned to get a good trajectory during the simulation.
 
